@@ -23,7 +23,11 @@ user_agent = f"github.com/wimglenn/everybody-codes-data v{v} by hey@wimglenn.com
 url_seed = "https://api.everybody.codes/user/me"
 url_keys = "https://api.everybody.codes/event/{event}/quest/{quest}"
 url_post = "https://api.everybody.codes/event/{event}/quest/{quest}/part/{part}/answer"
+url_post_gridos = (
+    "https://api.everybody.codes/event/{event}/quest/{quest}/part/{part}/answerQos"
+)
 url_data = "https://everybody.codes/assets/{event}/{quest}/input/{seed}.json"
+url_data_gridos = "https://everybody.codes/assets/{event}/{quest}/input.json"
 
 
 class EcdError(Exception):
@@ -89,9 +93,10 @@ def get_keys(quest, event):
     return data
 
 
-def get_encrypted_inputs(quest, event, seed):
+def get_encrypted_inputs(quest, event, seed, gridos=False):
     http = get_http()
-    url = url_data.format(quest=quest, event=event, seed=seed)
+    template = url_data_gridos if gridos else url_data
+    url = template.format(quest=quest, event=event, seed=seed)
     resp = http.request("GET", url)
     if resp.status != 200:
         raise EcdError(f"HTTP {resp.status} from {url}")

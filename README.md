@@ -28,6 +28,15 @@ There is a getter function `ecd.get_inputs` which accepts the quest and event, a
 The dict will have string keys "1", "2", "3" corresponding to the puzzle parts.
 Inputs are unlocked as you complete subsequent parts, so the dict will have only the key "1" initially.
 
+For a story, pass its public number with `category="story"`. For a GridOS mission,
+pass its public mission number with `category="gridos"`:
+
+``` python
+get_inputs(quest=1, event=1, category="gridos")  # GridOS mission 1
+```
+
+GridOS inputs do not use a seed; the `seed` argument is ignored for them.
+
 ``` python
 >>> from ecd import get_inputs
 >>> data = get_inputs(quest=3, event=2024)
@@ -78,6 +87,12 @@ See `ecd --help` for more info on that.
 ``` python
 from ecd import submit
 submit(quest=1, event=2024, part=1, answer=1323)
+```
+
+For GridOS, pass the program rules as `answer` and select the mission category:
+
+``` python
+submit(quest=1, event=1, part=1, answer="HEADS ...", category="gridos")
 ```
 
 If you don't want the submission result printed to the terminal, pass `quiet=True`.

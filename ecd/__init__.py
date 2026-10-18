@@ -12,22 +12,42 @@ from . import cli
 _log = logging.getLogger(__name__)
 
 
-def get_inputs(*, quest: int, event: int, seed: int | None = None) -> dict[str, str]:
+ChallengeCategory = t.Literal["event", "story", "gridos"]
+
+
+def _api_event(event: int, category: ChallengeCategory) -> int:
+    if category not in ("event", "story", "gridos"):
+        raise ValueError(f"Unknown challenge category: {category}")
+    return event + 3000 if category == "gridos" else event
+
+
+def get_inputs(
+    *,
+    quest: int,
+    event: int,
+    seed: int | None = None,
+    category: ChallengeCategory = "event",
+) -> dict[str, str]:
     """Get decrypted inputs for the given quest/event. The event (e.g. 2024) and the
     quest (1-20) must be specified by keyword argument, to avoid any ambiguity. The
     inputs will be retrieved from a local cache if it exists, but not that the cache
-    will be written only once all three parts can be decrypted.
+    will be written only once all three parts can be decrypted. For GridOS, event is
+    the public mission number and seed is ignored.
     """
-    if seed is None:
+    api_event = _api_event(event, category)
+    gridos = category == "gridos"
+    if seed is None and not gridos:
         seed = _impl.get_seed()
-    fname = f"{event}-{quest:02d}.{seed}.json"
-    path = _impl.top / fname
+    fname = f"{api_event}-{quest:02d}"
+    if not gridos:
+        fname += f".{seed}"
+    path = _impl.top / f"{fname}.json"
     if path.is_file():
         result = json.loads(path.read_text())
         _log.debug("got inputs from memo %s", path)
         return result
-    keys = _impl.get_keys(quest, event)
-    encrypted_inputs = _impl.get_encrypted_inputs(quest, event, seed)
+    keys = _impl.get_keys(quest, api_event)
+    encrypted_inputs = _impl.get_encrypted_inputs(quest, api_event, seed, gridos=gridos)
     result = {}
     for k, v in encrypted_inputs.items():
         if f"key{k}" in keys:
@@ -46,13 +66,19 @@ def submit(
     part: t.Literal[1, 2, 3],
     answer: int | str,
     quiet: bool = False,
+    category: ChallengeCategory = "event",
 ) -> BaseHTTPResponse:
     """Submit answer for the given quest/event. All arguments are keyword-only. Part
-    should be 1, 2, or 3."""
+    should be 1, 2, or 3. For GridOS, event is the public mission number and answer
+    contains the program rules."""
+    api_event = _api_event(event, category)
+    gridos = category == "gridos"
     http = _impl.get_http()
-    url = _impl.url_post.format(quest=quest, event=event, part=part)
+    template = _impl.url_post_gridos if gridos else _impl.url_post
+    url = template.format(quest=quest, event=api_event, part=part)
     _log.info("submitting %s to %s", answer, url)
-    resp = http.request("POST", url, json={"answer": answer})
+    payload = {"rules": answer} if gridos else {"answer": answer}
+    resp = http.request("POST", url, json=payload)
     if resp.status == 200:
         data = resp.json()
         pretty = json.dumps(data, indent=2)

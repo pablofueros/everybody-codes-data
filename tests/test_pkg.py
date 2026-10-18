@@ -2,6 +2,7 @@ import json
 import logging
 
 import ecd
+import pytest
 
 
 def test_getattr(mocker):
@@ -50,6 +51,34 @@ def test_get_inputs_no_cache_for_partial_unlock(top, mocker, fake_seed):
     assert not cached.exists()
 
 
+def test_get_inputs_gridos(top, fake_token, mocker, pook):
+    pook.get("https://api.everybody.codes/event/3001/quest/1").reply(200).json(
+        {"key1": "key1", "key2": "key2", "key3": "key3"}
+    )
+    pook.get("https://everybody.codes/assets/3001/1/input.json").reply(200).json(
+        {"1": "encrypted1", "2": "encrypted2", "3": "encrypted3"}
+    )
+    mocker.patch(
+        "ecd._impl.get_seed", side_effect=AssertionError("GridOS needs no seed")
+    )
+    mocker.patch("ecd._impl.decrypt", lambda value, key: f"decrypted-{key}")
+
+    result = ecd.get_inputs(quest=1, event=1, category="gridos")
+
+    assert result == {
+        "1": "decrypted-key1",
+        "2": "decrypted-key2",
+        "3": "decrypted-key3",
+    }
+    assert json.loads((top / "3001-01.json").read_text()) == result
+    assert ecd.get_inputs(quest=1, event=1, category="gridos", seed=7) == result
+
+
+def test_unknown_category():
+    with pytest.raises(ValueError, match="Unknown challenge category"):
+        ecd.get_inputs(quest=1, event=1, category="unknown")
+
+
 def test_submit(fake_token, pook, capsys):
     url = "https://api.everybody.codes/event/2/quest/1/part/3/answer"
     pook.post(url).reply(200).json({"correct": True})
@@ -58,6 +87,22 @@ def test_submit(fake_token, pook, capsys):
     assert not err
     assert '"correct": true' in out
     assert resp.json() == {"correct": True}
+
+
+def test_submit_gridos(mocker):
+    http = mocker.patch("ecd._impl.get_http")
+    http.return_value.request.return_value.status = 200
+    http.return_value.request.return_value.json.return_value = {"correct": True}
+
+    ecd.submit(
+        quest=1, event=1, part=2, answer="HEADS ...", category="gridos", quiet=True
+    )
+
+    http.return_value.request.assert_called_once_with(
+        "POST",
+        "https://api.everybody.codes/event/3001/quest/1/part/2/answerQos",
+        json={"rules": "HEADS ..."},
+    )
 
 
 def test_submit_quiet(fake_token, pook, capsys):
